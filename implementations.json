@@ -9,11 +9,6 @@
     "url": "https://github.com/ngtcp2/ngtcp2",
     "role": "both"
   },
-  "quant": {
-    "image": "ntap/quant:interop",
-    "url": "https://github.com/NTAP/quant",
-    "role": "both"
-  },
   "mvfst": {
     "image": "lnicco/mvfst-qns:latest",
     "url": "https://github.com/facebookincubator/mvfst",
@@ -56,7 +51,7 @@
   },
   "chrome": {
     "image": "martenseemann/chrome-quic-interop-runner",
-    "url": "https://github.com/marten-seemann/chrome-quic-interop-runner",
+    "url": "https://github.com/quic-interop/chrome-quic-interop-runner",
     "role": "client"
   },
   "xquic": {
@@ -82,6 +77,11 @@
   "s2n-quic": {
     "image": "public.ecr.aws/s2n/s2n-quic-qns:latest",
     "url": "https://github.com/aws/s2n-quic",
+    "role": "both"
+  },
+  "go-x-net": {
+    "image": "us-central1-docker.pkg.dev/golang-interop-testing/quic/go-x-net:latest",
+    "url": "https://pkg.go.dev/golang.org/x/net/internal/quic",
     "role": "both"
   }
 }
