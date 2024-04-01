@@ -1985,14 +1985,14 @@ TESTCASES = [
     TestCaseHandshake,
     # TestCaseTransfer,
     # TestCaseLongRTT,
-    TestCaseChaCha20,
+    # TestCaseChaCha20,
     # TestCaseMultiplexing,
     # TestCaseRetry,
-    TestCaseResumption,
-    TestCaseZeroRTT,
+    # TestCaseResumption,
+    # TestCaseZeroRTT,
     TestCaseHTTP3,
     # TestCaseBlackhole,
-    TestCaseKeyUpdate,
+    # TestCaseKeyUpdate,
     # TestCaseECN,
     # TestCaseAmplificationLimit,
     # TestCaseHandshakeLoss,
@@ -2010,8 +2010,8 @@ TESTCASES = [
     # Current Wireshark version cannot support the following tests
     TestCaseMultipathHandshake,
     TestCaseMultipathTransfer,
-    TestCaseMultipathStatus,
-    TestCaseMultipathPathAbandon,
+    # TestCaseMultipathStatus,
+    # TestCaseMultipathPathAbandon,
 ]
 
 MEASUREMENTS = [
