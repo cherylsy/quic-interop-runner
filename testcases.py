@@ -994,10 +994,21 @@ class TestCaseKeyUpdate(TestCaseHandshake):
         client = {0: 0, 1: 0}
         server = {0: 0, 1: 0}
         try:
+
+            def _get_key_phase(pkt) -> int:
+                kp: str = pkt.key_phase.raw_value
+                # when key_phase bit is set in a QUIC packet, certain versions
+                # of wireshark (4.0.11, for example) have been seen to return the string value
+                # "1" and certain other versions of wireshark return the string value "True".
+                # here we deal with such values and return the integer value 1 for either of those.
+                return 1 if kp in ["1", "True"] else 0
+
             for p in self._client_trace().get_1rtt(Direction.FROM_CLIENT):
-                client[1 if p.key_phase == "True" else 0] += 1
+                key_phase = _get_key_phase(p)
+                client[key_phase] += 1
             for p in self._server_trace().get_1rtt(Direction.FROM_SERVER):
-                server[1 if p.key_phase == "True" else 0] += 1
+                key_phase = _get_key_phase(p)
+                server[key_phase] += 1
         except Exception:
             logging.info(
                 "Failed to read key phase bits. Potentially incorrect SSLKEYLOG?"
@@ -1292,9 +1303,11 @@ class TestCasePortRebinding(TestCaseTransfer):
         num_migrations = 0
         for p in tr_server:
             cur = (
-                getattr(p["ipv6"], "dst")
-                if "IPV6" in str(p.layers)
-                else getattr(p["ip"], "dst"),
+                (
+                    getattr(p["ipv6"], "dst")
+                    if "IPV6" in str(p.layers)
+                    else getattr(p["ip"], "dst")
+                ),
                 int(getattr(p["udp"], "dstport")),
             )
             if last is None:
@@ -1487,9 +1500,11 @@ class TestCaseConnectionMigration(TestCaseAddressRebinding):
         dcid = None
         for p in tr_client:
             cur = (
-                getattr(p["ipv6"], "src")
-                if "IPV6" in str(p.layers)
-                else getattr(p["ip"], "src"),
+                (
+                    getattr(p["ipv6"], "src")
+                    if "IPV6" in str(p.layers)
+                    else getattr(p["ip"], "src")
+                ),
                 int(getattr(p["udp"], "srcport")),
             )
             if last is None:

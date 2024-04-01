@@ -1,7 +1,9 @@
 name: interop
 on:
   schedule:
-  - cron: "0 */8 * * *" # every 8h
+   # Every 8h, at 15 minutes past the hour
+   # This makes sure that the cleanup cron job can run first.
+  - cron: "15 */8 * * *"
 
 # Cache key for caching the Wireshark build.
 # To trigger a rebuild of Wireshark increment this value.
@@ -15,7 +17,7 @@ jobs:
     steps:
       - name: Restore from cache
         id: restore-cache
-        uses: actions/cache@v3
+        uses: actions/cache@v4
         env:
           VERSION: ${{ env.WIRESHARK_CACHEKEY }}
         with:
@@ -26,7 +28,7 @@ jobs:
         run: |
           tar xfz tshark.tar.gz
           ./tshark -v
-      - uses: actions/checkout@v3
+      - uses: actions/checkout@v4
         if: steps.restore-cache.outputs.cache-hit != 'true'
         with:
           repository: the-tcpdump-group/libpcap
@@ -36,7 +38,7 @@ jobs:
           ./autogen.sh
           ./configure --disable-dbus --disable-rdma
           sudo make install
-      - uses: actions/checkout@v3
+      - uses: actions/checkout@v4
         if: steps.restore-cache.outputs.cache-hit != 'true'
         with:
           repository: wireshark/wireshark
@@ -54,7 +56,7 @@ jobs:
         if: steps.restore-cache.outputs.cache-hit != 'true'
         run: tar -czvf tshark.tar.gz -C run/ tshark
       - name: Upload
-        uses: actions/upload-artifact@v3
+        uses: actions/upload-artifact@v4
         with:
           name: wireshark
           path: tshark.tar.gz
@@ -79,8 +81,8 @@ jobs:
           STARTTIME=$(date +%s)
           echo $STARTTIME
           echo "starttime=$STARTTIME" >> $GITHUB_OUTPUT
-      - uses: actions/checkout@v3
-      - uses: actions/setup-python@v4
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
         with:
           python-version: 3.8
       - name: Determine servers
@@ -107,7 +109,7 @@ jobs:
       matrix:
         image: [ 'quic-network-simulator', 'quic-interop-iperf-endpoint' ]
     steps:
-    - uses: actions/checkout@v3
+    - uses: actions/checkout@v4
     - name: Pull
       run: |
         URL="martenseemann/${{ matrix.image }}"
@@ -120,9 +122,9 @@ jobs:
         docker save $URL | gzip --best > ${{ matrix.image }}.tar.gz
         du -sh ${{ matrix.image }}.tar.gz
     - name: Upload result
-      uses: actions/upload-artifact@v3
+      uses: actions/upload-artifact@v4
       with:
-        name: images-tools
+        name: images-${{ matrix.image }}
         path: ${{ matrix.image }}.tar.gz
         if-no-files-found: error
   docker-pull-images:
@@ -133,7 +135,7 @@ jobs:
         image: ${{ fromJson(needs.config.outputs.images) }}
     name: Pull ${{ matrix.image }}
     steps:
-      - uses: actions/checkout@v3
+      - uses: actions/checkout@v4
       - name: Run docker pull
         run: |
           URL=$(jq -r '.["${{ matrix.image }}"].image' implementations.json)
@@ -147,7 +149,7 @@ jobs:
           docker save $URL | gzip --best > ${{ matrix.image }}.tar.gz
           du -sh ${{ matrix.image }}.tar.gz
       - name: Upload result
-        uses: actions/upload-artifact@v3
+        uses: actions/upload-artifact@v4
         with:
           name: image-${{ matrix.image }}
           path: ${{ matrix.image }}.tar.gz
@@ -156,6 +158,7 @@ jobs:
     needs: [ wireshark, config, docker-pull-tools, docker-pull-images ]
     runs-on: ubuntu-latest
     continue-on-error: true
+    timeout-minutes: 45
     strategy:
       fail-fast: false
       matrix: 
@@ -163,24 +166,28 @@ jobs:
         client: ${{ fromJson(needs.config.outputs.clients) }}
     name: (${{ matrix.server }} - ${{ matrix.client }})
     steps:
-      - uses: actions/checkout@v3
-      - uses: actions/setup-python@v4
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
         with:
           python-version: 3.8
       - name: Enable IPv6 support
         run: sudo modprobe ip6table_filter
       - run: docker image ls
-      - name: Download tools Docker images
-        uses: actions/download-artifact@v3
+      - name: Download quic-network-simulator image
+        uses: actions/download-artifact@v4
         with:
-          name: images-tools
+          name: images-quic-network-simulator
+      - name: Download quic-interop-iperf-endpoint image
+        uses: actions/download-artifact@v4
+        with:
+          name: images-quic-interop-iperf-endpoint
       - name: Download ${{ matrix.server }} Docker image
-        uses: actions/download-artifact@v3
+        uses: actions/download-artifact@v4
         with:
           name: image-${{ matrix.server }}
       - name: Download ${{ matrix.client }} Docker image
         if: ${{ matrix.server != matrix.client }}
-        uses: actions/download-artifact@v3
+        uses: actions/download-artifact@v4
         with:
           name: image-${{ matrix.client }}
       - name: Load docker images
@@ -191,7 +198,7 @@ jobs:
           docker load --input ${{ matrix.client }}.tar.gz
       - run: docker image ls
       - name: Download Wireshark
-        uses: actions/download-artifact@v3
+        uses: actions/download-artifact@v4
         with:
           name: wireshark
           path: wireshark
@@ -222,50 +229,41 @@ jobs:
           find logs_measurement -depth -name "client" -type d -exec rm -r "{}" \;
           find logs_measurement -depth -name "server" -type d -exec rm -r "{}" \;
           mv logs_measurement/${{ matrix.server }}_${{ matrix.client }}/* logs/${{ matrix.server }}_${{ matrix.client }}/
-      - name: Upload logs
+      - name: Upload logs to interop.seemann.io
+        uses: burnett01/rsync-deployments@e1c5b900e976bbc2a6aadf7fd85d7bef67ede4f1 # v7.0.0
         if: ${{ github.event_name == 'schedule' }}
-        uses: appleboy/scp-action@master
         with:
-          host: interop.seemann.io
-          username: ${{ secrets.INTEROP_SEEMANN_IO_USER }}
-          key: ${{ secrets.INTEROP_SEEMANN_IO_SSH_KEY }}
-          source: logs/${{ matrix.server }}_${{ matrix.client }}
-          target: /mnt/logs/${{ needs.config.outputs.logname }}
-          strip_components: 1
+          switches: -avzr --relative
+          path: logs/./${{ matrix.server }}_${{ matrix.client }}/
+          remote_path: ${{ vars.LOG_DIR }}/${{ needs.config.outputs.logname }}
+          remote_host: interop.seemann.io
+          remote_user: ${{ secrets.INTEROP_SEEMANN_IO_USER }}
+          remote_key: ${{ secrets.INTEROP_SEEMANN_IO_SSH_KEY }}
       - name: Upload result
-        uses: actions/upload-artifact@v3
+        uses: actions/upload-artifact@v4
         with:
-          name: results
+          name: results-${{ matrix.server }}-${{ matrix.client }}
           if-no-files-found: error
           path: |
             ${{ matrix.server }}_${{ matrix.client }}_results.json
             ${{ matrix.server }}_${{ matrix.client }}_measurements.json
-      - name: Install b2 cli
-        if: ${{ github.event_name == 'schedule' }}
-        uses: sylwit/install-b2-cli-action@v1.0.0
-        env:
-          B2_APPLICATION_KEY_ID: ${{ secrets.BACKBLAZE_KEY_ID }}
-          B2_APPLICATION_KEY: ${{ secrets.BACKBLAZE_APPLICATION_KEY }}
-      - name: Upload logs
-        if: ${{ github.event_name == 'schedule' }}
-        run: |
-          b2 sync logs/${{ matrix.server }}_${{ matrix.client }} b2://${{ vars.BACKBLAZE_BUCKET }}/${{ needs.config.outputs.logname }}/${{ matrix.server }}_${{ matrix.client }}
   aggregate:
     needs: [ config, tests ]
     runs-on: ubuntu-latest
     env:
       LOGNAME: ${{ needs.config.outputs.logname }}
     steps:
-      - uses: actions/checkout@v3
-      - uses: actions/setup-python@v4
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
         with:
           python-version: 3.8
       - name: Download results
-        uses: actions/download-artifact@v3
+        uses: actions/download-artifact@v4
         with:
-          name: results
+          pattern: results-*
       - name: Aggregate results
         run: |
+          mv results-*/*.json .
           python .github/workflows/aggregate.py \
             --start-time ${{ needs.config.outputs.starttime }} \
             --server ${{ join(fromJson(needs.config.outputs.servers), ',') }} \
@@ -275,67 +273,30 @@ jobs:
       - name: Print result
         run: jq '.' result.json
       - name: Upload result to artifacts
-        uses: actions/upload-artifact@v3
+        uses: actions/upload-artifact@v4
         with:
-          name: results
+          name: result-aggregated
           path: result.json
-      - name: Upload result to interop.seemann.io
+      - name: Upload logs to interop.seemann.io
+        uses: burnett01/rsync-deployments@e1c5b900e976bbc2a6aadf7fd85d7bef67ede4f1 # v7.0.0
         if: ${{ github.event_name == 'schedule' }}
-        uses: appleboy/scp-action@master
         with:
-          host: interop.seemann.io
-          username: ${{ secrets.INTEROP_SEEMANN_IO_USER }}
-          key: ${{ secrets.INTEROP_SEEMANN_IO_SSH_KEY }}
-          source: result.json
-          target: /mnt/logs/${{ needs.config.outputs.logname }}
-      - name: Publish result
+          switches: -avzr
+          path: result.json
+          remote_path: ${{ vars.LOG_DIR }}/${{ needs.config.outputs.logname }}/
+          remote_host: interop.seemann.io
+          remote_user: ${{ secrets.INTEROP_SEEMANN_IO_USER }}
+          remote_key: ${{ secrets.INTEROP_SEEMANN_IO_SSH_KEY }}
+      - name: Point interop.seemann.io to the latest result 
+        uses: appleboy/ssh-action@029f5b4aeeeb58fdfe1410a5d17f967dacf36262 # v1.0.3
         if: ${{ github.event_name == 'schedule' }}
-        uses: appleboy/ssh-action@master
         with:
           host: interop.seemann.io
           username: ${{ secrets.INTEROP_SEEMANN_IO_USER }}
           key: ${{ secrets.INTEROP_SEEMANN_IO_SSH_KEY }}
           envs: LOGNAME
           script: |
-            cd /mnt/logs
+            cd ${{ vars.LOG_DIR }}
             jq '. += [ "${{ needs.config.outputs.logname }}" ]' logs.json | sponge logs.json
             rm latest || true
             ln -s $LOGNAME latest
-      - name: Install b2 cli
-        if: ${{ github.event_name == 'schedule' }}
-        uses: sylwit/install-b2-cli-action@v1.0.0
-        env:
-          B2_APPLICATION_KEY_ID: ${{ secrets.BACKBLAZE_KEY_ID }}
-          B2_APPLICATION_KEY: ${{ secrets.BACKBLAZE_APPLICATION_KEY }}
-      - name: Upload result
-        if: ${{ github.event_name == 'schedule' }}
-        run: |
-          b2 upload-file ${{ vars.BACKBLAZE_BUCKET }} result.json ${{ needs.config.outputs.logname }}/result.json
-      - name: Remove old logs
-        if: ${{ github.event_name == 'schedule' }}
-        run: |
-          # b2 ls neither lists the contents of the bucket, nor does it list all files
-          # Instead, it returns exactly *one* (the oldest) file per folder
-          threshold_time=$((($(date +%s) * 1000) - (${{ vars.LOG_RETENTION_DAYS }} * 24 * 60 * 60 * 1000)))
-          # Now delete them
-          b2 ls --json ${{ vars.BACKBLAZE_BUCKET}} | jq -r ".[] | select(.uploadTimestamp < $threshold_time) | .fileName" | while read -r filename; do 
-            dir_name="${filename%%/*}"
-            # skip files, we only care about directories
-            if [[ "$dir_name" != "." ]]; then
-              echo "Deleting $dir_name"
-              # see https://github.com/Backblaze/B2_Command_Line_Tool/issues/495#issuecomment-413932585
-              mkdir empty # create an empty directory
-              b2 sync --delete --allowEmptySource empty b2://${{ vars.BACKBLAZE_BUCKET }}/"$dir_name"
-              rmdir empty
-            fi
-          done
-      - name: Generate logs.json and upload it
-        if: ${{ github.event_name == 'schedule' }}
-        run: |
-          # First delete old version(s) of logs.json
-          # Otherwise, b2 would store multiple versions of this file.
-          b2 ls --withWildcard --recursive --versions --json quic-interop-runner "logs.json" | jq -r ".[] | .fileId" | while read -r fileid; do 
-            b2 delete-file-version logs.json $fileid
-          done
-          b2 ls --json quic-interop-runner | jq '[sort_by(.uploadTimestamp) | .[] | select(.fileName | contains("/")) | .fileName | split("/")[0] | select(. != null)]' > logs.json
-          b2 upload-file ${{ vars.BACKBLAZE_BUCKET }} logs.json logs.json

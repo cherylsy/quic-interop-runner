@@ -10,7 +10,7 @@
     "role": "both"
   },
   "mvfst": {
-    "image": "lnicco/mvfst-qns:latest",
+    "image": "ghcr.io/facebook/proxygen/mvfst-interop:latest",
     "url": "https://github.com/facebookincubator/mvfst",
     "role": "both"
   },
@@ -35,12 +35,12 @@
     "role": "both"
   },
   "neqo": {
-    "image": "neqoquic/neqo-qns:latest",
+    "image": "ghcr.io/mozilla/neqo-qns:latest",
     "url": "https://github.com/mozilla/neqo",
     "role": "both"
   },
   "nginx": {
-    "image": "public.ecr.aws/nginx/nginx-quic-qns:latest",
+    "image": "ghcr.io/nginx/nginx-quic-qns:latest",
     "url": "https://quic.nginx.org/",
     "role": "server"
   },
@@ -75,7 +75,7 @@
     "role": "both"
   },
   "s2n-quic": {
-    "image": "public.ecr.aws/s2n/s2n-quic-qns:latest",
+    "image": "ghcr.io/aws/s2n-quic/s2n-quic-qns:latest",
     "url": "https://github.com/aws/s2n-quic",
     "role": "both"
   },
