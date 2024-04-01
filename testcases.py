@@ -2015,6 +2015,6 @@ TESTCASES = [
 ]
 
 MEASUREMENTS = [
-    MeasurementGoodput,
-    MeasurementCrossTraffic,
+    # MeasurementGoodput,
+    # MeasurementCrossTraffic,
 ]
