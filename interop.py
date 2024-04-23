@@ -192,16 +192,18 @@ class InteropRunner:
             t = prettytable.PrettyTable()
             if self._markdown:
                 t.set_style(prettytable.MARKDOWN)
-            t.hrules = prettytable.ALL
-            t.vrules = prettytable.ALL
+            else:
+                t.hrules = prettytable.ALL
+                t.vrules = prettytable.ALL
             rows = {}
             columns = {}
             for client, server in self._client_server_pairs:
                 columns[server] = {}
                 row = rows.setdefault(client, {})
                 cell = self.test_results[server][client]
-                res = colored(get_letters(TestResult.SUCCEEDED), "green") + "\n"
-                res += colored(get_letters(TestResult.UNSUPPORTED), "grey") + "\n"
+                br = "<br>" if self._markdown else "\n"
+                res = colored(get_letters(TestResult.SUCCEEDED), "green") + br
+                res += colored(get_letters(TestResult.UNSUPPORTED), "grey") + br
                 res += colored(get_letters(TestResult.FAILED), "red")
                 row[server] = res
 
@@ -215,9 +217,11 @@ class InteropRunner:
 
         if len(self._measurements) > 0:
             t = prettytable.PrettyTable()
-            t.hrules = prettytable.ALL
-            t.vrules = prettytable.ALL
-            t.field_names = [""]
+            if self._markdown:
+                t.set_style(prettytable.MARKDOWN)
+            else:
+                t.hrules = prettytable.ALL
+                t.vrules = prettytable.ALL
             rows = {}
             columns = {}
             for client, server in self._client_server_pairs:
